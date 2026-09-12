@@ -17,10 +17,10 @@ class VooglePipeline:
         self.sample_rate = sample_rate
         print("Voogle Pipeline Initialized.")
         
-    def process(self, audio_file_path):
-        """
+    def process(self, audio_file_path, selected_tasks=None):
+        \"\"\"
         End-to-end processing pipeline for a given audio file.
-        """
+        \"\"\"
         print(f"Processing audio file: {audio_file_path}")
         
         # 1. Load Audio
@@ -46,24 +46,35 @@ class VooglePipeline:
         print("Generating audio embeddings...")
         embeddings = get_general_purpose_embeddings(mel_spec)
         print(f"Generated embedding vector of shape: {embeddings.shape}")
-        
         # 5. Execute Tasks
-        print("\n--- Executing Voogle Tasks (using SOTA models) ---")
-        results = self.run_tasks(embeddings, audio_file_path, audio_signal)
+        print(\"\n--- Executing Voogle Tasks (using SOTA models) ---\")
+        results = self.run_tasks(embeddings, audio_file_path, audio_signal, selected_tasks)
         return results
         
-    def run_tasks(self, embeddings, audio_file_path, audio_signal):
+    def run_tasks(self, embeddings, audio_file_path, audio_signal, selected_tasks=None):
         results = {}
-        results['diarization'] = process_diarization(audio_file_path)
-        results['emotion'] = process_emotion(audio_signal)
-        results['retrieval'] = process_retrieval(embeddings) 
-        results['transcription'] = process_transcription(audio_signal)
-        results['language'] = process_language(audio_signal)
-        results['music'] = process_music(audio_file_path)
+        
+        # If no specific tasks provided, default to all for backward compatibility
+        if selected_tasks is None:
+            selected_tasks = ['Diarization', 'Emotion', 'Retrieval', 'Transcription', 'Language', 'Music']
+            
+        if 'Diarization' in selected_tasks:
+            results['diarization'] = process_diarization(audio_file_path)
+        if 'Emotion' in selected_tasks:
+            results['emotion'] = process_emotion(audio_signal)
+        if 'Retrieval' in selected_tasks:
+            results['retrieval'] = process_retrieval(embeddings) 
+        if 'Transcription' in selected_tasks:
+            results['transcription'] = process_transcription(audio_signal)
+        if 'Language' in selected_tasks:
+            results['language'] = process_language(audio_signal)
+        if 'Music' in selected_tasks:
+            results['music'] = process_music(audio_file_path)
+            
         return results
 
 if __name__ == "__main__":
     pipeline = VooglePipeline()
     # Provide a dummy path or a real audio path here
-    pipeline.process("test_audio.wav")
+    pipeline.process("test_audio.wav", selected_tasks=['Transcription', 'Music'])
     print("\nVoogle core engine is ready.")
