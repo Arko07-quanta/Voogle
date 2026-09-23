@@ -1,8 +1,7 @@
-torch
-torchaudio
-transformers
 librosa
 soundfile
+pocketsphinx
+scikit-learn
 scipy
 numpy
 gradio

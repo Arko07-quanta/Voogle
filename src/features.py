@@ -1,16 +1,10 @@
 import numpy as np
-from transformers import ASTFeatureExtractor
-import torch
-
-# Load the SOTA feature extractor corresponding to our model
-feature_extractor = ASTFeatureExtractor.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593")
+import librosa
 
 def extract_mel_spectrogram(audio_signal, sample_rate):
     """
-    Extracts Mel-frequency spectrograms using SOTA ASTFeatureExtractor.
-    This maintains the 'Mel filter bank' approach but optimizes it for our SOTA model.
+    Extracts Mel-frequency spectrograms using librosa.
     """
-    # The AST feature extractor handles the mel-spectrogram creation
-    inputs = feature_extractor(audio_signal, sampling_rate=sample_rate, return_tensors="pt")
-    # We return the input_values which are the mel-spectrograms expected by the AST model
-    return inputs.input_values
+    mel_spec = librosa.feature.melspectrogram(y=audio_signal, sr=sample_rate, n_mels=128)
+    mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+    return mel_spec_db

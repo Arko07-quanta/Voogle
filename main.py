@@ -18,9 +18,9 @@ class VooglePipeline:
         print("Voogle Pipeline Initialized.")
         
     def process(self, audio_file_path, selected_tasks=None):
-        \"\"\"
+        """
         End-to-end processing pipeline for a given audio file.
-        \"\"\"
+        """
         print(f"Processing audio file: {audio_file_path}")
         
         # 1. Load Audio
@@ -42,12 +42,12 @@ class VooglePipeline:
         print("Extracting features...")
         mel_spec = extract_mel_spectrogram(clipped_signal, self.sample_rate)
         
-        # 4. Neural Network Integration (Embeddings)
-        print("Generating audio embeddings...")
+        # 4. Signal Features Integration (Embeddings)
+        print("Generating audio signal embeddings...")
         embeddings = get_general_purpose_embeddings(mel_spec)
         print(f"Generated embedding vector of shape: {embeddings.shape}")
         # 5. Execute Tasks
-        print(\"\n--- Executing Voogle Tasks (using SOTA models) ---\")
+        print("\n--- Executing Voogle Tasks (using SOTA signal processing) ---")
         results = self.run_tasks(embeddings, audio_file_path, audio_signal, selected_tasks)
         return results
         
@@ -59,7 +59,7 @@ class VooglePipeline:
             selected_tasks = ['Diarization', 'Emotion', 'Retrieval', 'Transcription', 'Language', 'Music']
             
         if 'Diarization' in selected_tasks:
-            results['diarization'] = process_diarization(audio_file_path)
+            results['diarization'] = process_diarization(audio_signal)
         if 'Emotion' in selected_tasks:
             results['emotion'] = process_emotion(audio_signal)
         if 'Retrieval' in selected_tasks:
@@ -76,5 +76,5 @@ class VooglePipeline:
 if __name__ == "__main__":
     pipeline = VooglePipeline()
     # Provide a dummy path or a real audio path here
-    pipeline.process("test_audio.wav", selected_tasks=['Transcription', 'Music'])
+    pipeline.process("test_audio.wav", selected_tasks=['Diarization', 'Emotion', 'Retrieval', 'Transcription', 'Language', 'Music'])
     print("\nVoogle core engine is ready.")

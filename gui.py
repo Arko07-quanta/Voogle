@@ -37,10 +37,13 @@ def analyze_audio(audio_path, selected_tasks):
         output += f"🎵 Tempo: {results['music'].get('tempo', 'N/A')} BPM\n"
     
     if 'Diarization' in selected_tasks:
-        speakers = results['diarization'].get('speakers', [])
-        output += f"👥 Diarization: {len(speakers)} segments detected\n"
-        for s in speakers:
-            output += f"   - Speaker {s.get('speaker', '?')}: {s.get('start', 0):.1f}s to {s.get('end', 0):.1f}s\n"
+        if results['diarization'].get('status') == 'error':
+            output += f"👥 Diarization: [ERROR] {results['diarization'].get('reason', 'Unknown Error')}\n"
+        else:
+            speakers = results['diarization'].get('speakers', [])
+            output += f"👥 Diarization: {len(speakers)} segments detected\n"
+            for s in speakers:
+                output += f"   - Speaker {s.get('speaker', '?')}: {s.get('start', 0):.1f}s to {s.get('end', 0):.1f}s\n"
             
     if 'Retrieval' in selected_tasks:
         output += f"🔍 Retrieval Match: {results['retrieval'].get('similarity', 'N/A')}\n"
@@ -56,7 +59,7 @@ iface = gr.Interface(
     ],
     outputs=gr.Textbox(label="Analysis Results", lines=15),
     title="Voogle - The Ultimate Voice Search Engine",
-    description="Upload an audio file or record from your microphone, choose your tasks, and analyze it using State-of-the-Art Neural Networks!",
+    description="Upload an audio file or record from your microphone, choose your tasks, and analyze it using State-of-the-Art Signal Processing Algorithms!",
     theme="huggingface"
 )
 

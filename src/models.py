@@ -1,33 +1,16 @@
-import torch
-from transformers import ASTModel
+import numpy as np
 
-class AudioEmbeddingModel:
+def get_general_purpose_embeddings(mel_spec_db):
     """
-    Uses State-of-the-Art Audio Spectrogram Transformer (AST) to generate general-purpose audio embeddings.
+    Computes statistical features (mean and std across time) from the mel spectrogram 
+    to serve as a general-purpose 'embedding' vector for classical signal processing.
     """
-    def __init__(self, model_name="MIT/ast-finetuned-audioset-10-10-0.4593"):
-        print(f"Loading SOTA Embedding Model: {model_name}...")
-        # We load the base model to get embeddings (hidden states), not the classification head
-        self.model = ASTModel.from_pretrained(model_name)
-        self.model.eval()
+    if mel_spec_db.ndim > 2:
+        mel_spec_db = np.squeeze(mel_spec_db)
         
-    def get_embeddings(self, input_values):
-        """
-        Passes the extracted features (spectrogram) through the AST model to get embeddings.
-        """
-        with torch.no_grad():
-            # AST returns a tuple, the first element is the sequence of hidden states
-            outputs = self.model(input_values)
-            # We can take the pooled output (often the [CLS] token equivalent) as the general embedding
-            embeddings = outputs.pooler_output 
-        return embeddings
-
-# Global instance to avoid reloading
-_embedding_model = None
-
-def get_general_purpose_embeddings(input_values):
-    global _embedding_model
-    if _embedding_model is None:
-        _embedding_model = AudioEmbeddingModel()
-        
-    return _embedding_model.get_embeddings(input_values)
+    mean_features = np.mean(mel_spec_db, axis=1)
+    std_features = np.std(mel_spec_db, axis=1)
+    
+    # Concatenate mean and std to form the embedding vector
+    embeddings = np.concatenate([mean_features, std_features])
+    return embeddings
