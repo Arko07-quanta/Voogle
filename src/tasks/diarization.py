@@ -1,21 +1,38 @@
 import numpy as np
 import librosa
+from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist, squareform
-from sklearn.cluster import KMeans
 
 def compute_normalized_laplacian(affinity_matrix):
     """
     Computes the Normalized Graph Laplacian: L = I - D^{-1/2} A D^{-1/2}
     """
     degree_matrix = np.diag(np.sum(affinity_matrix, axis=1))
-    # D^{-1/2}
     d_inv_sqrt = np.diag(1.0 / np.sqrt(np.diag(degree_matrix) + 1e-12))
-    
-    # L_sym = I - D^{-1/2} * A * D^{-1/2}
     identity = np.eye(affinity_matrix.shape[0])
     normalized_laplacian = identity - np.dot(d_inv_sqrt, np.dot(affinity_matrix, d_inv_sqrt))
-    
     return normalized_laplacian
+
+def spectral_bisection_cluster(spectral_embedding, k=2):
+    """
+    Classical spectral bisection clustering using the Fiedler vector / eigen-projection.
+    Partitions segments based on sign and median splitting in the spectral embedding space.
+    """
+    n_samples = spectral_embedding.shape[0]
+    if n_samples <= k:
+        return np.arange(n_samples)
+    
+    if k == 2 and spectral_embedding.shape[1] >= 2:
+        fiedler = spectral_embedding[:, 1]
+        threshold = np.median(fiedler)
+        labels = (fiedler > threshold).astype(int)
+        if len(np.unique(labels)) == 1 and n_samples >= 2:
+            labels[0] = 1 - labels[0]
+        return labels
+    
+    z = linkage(spectral_embedding, method='ward')
+    labels = fcluster(z, t=k, criterion='maxclust') - 1
+    return labels
 
 def process_diarization(audio_signal, sample_rate=16000):
     """
@@ -51,12 +68,9 @@ def process_diarization(audio_signal, sample_rate=16000):
             labels = np.zeros(n_samples, dtype=int)
         else:
             # 3. Construct Affinity Matrix using RBF Kernel
-            # A_ij = exp(-gamma * ||x_i - x_j||^2)
             pairwise_dists = squareform(pdist(X, 'euclidean'))
             gamma = 1.0 / (2.0 * np.var(pairwise_dists) + 1e-6)
             affinity_matrix = np.exp(-gamma * (pairwise_dists ** 2))
-            
-            # Zero out diagonal to avoid self-loops dominating
             np.fill_diagonal(affinity_matrix, 0)
             
             # 4. Compute Graph Laplacian
@@ -64,22 +78,13 @@ def process_diarization(audio_signal, sample_rate=16000):
             
             # 5. Eigendecomposition
             eigenvalues, eigenvectors = np.linalg.eigh(laplacian)
-            
-            # We want to separate into a known number of speakers, let's assume k=2
             k_speakers = min(2, n_samples)
-            
-            # Extract the eigenvectors corresponding to the k smallest eigenvalues (skip the very first which is 0)
-            # Actually for Normalized Laplacian, the multiplicity of 0 is the number of connected components.
-            # We take the first k eigenvectors.
             spectral_embedding = eigenvectors[:, :k_speakers]
-            
-            # Normalize rows of the embedding matrix
             norms = np.linalg.norm(spectral_embedding, axis=1, keepdims=True)
             spectral_embedding = spectral_embedding / (norms + 1e-12)
             
-            # 6. Cluster in the Eigen-space
-            kmeans = KMeans(n_clusters=k_speakers, random_state=42, n_init=10)
-            labels = kmeans.fit_predict(spectral_embedding)
+            # 6. Cluster in the Eigen-space using classical spectral bisection / linkage
+            labels = spectral_bisection_cluster(spectral_embedding, k=k_speakers)
             
         speakers_detected = []
         for i, (start_i, end_i) in enumerate(valid_intervals):
