@@ -1,7 +1,14 @@
+import os
+import shutil
+import uuid
 import numpy as np
 import librosa
 from src.tree_index import AudioTreeIndex
 from src.signature_extractors import extract_voice_feature, extract_song_feature
+
+# Directory to permanently archive recorded/uploaded dataset files
+SAMPLES_STORAGE_DIR = "datasets/audio_samples"
+os.makedirs(SAMPLES_STORAGE_DIR, exist_ok=True)
 
 # Shared tree instances
 _voice_tree = None
@@ -19,25 +26,56 @@ def get_song_tree(storage_dir="indexes"):
         _song_tree = AudioTreeIndex("songs", dimension=274, storage_dir=storage_dir)
     return _song_tree
 
+def _persist_audio_sample(audio_file_path, category, label):
+    """
+    Saves a copy of the recorded/uploaded temporary audio into a persistent local folder.
+    """
+    safe_label = "".join([c if c.isalnum() else "_" for c in label]).strip("_")
+    unique_id = uuid.uuid4().hex[:8]
+    ext = os.path.splitext(audio_file_path)[1]
+    if not ext:
+        ext = ".wav"
+    target_name = f"{category}_{safe_label}_{unique_id}{ext}"
+    target_path = os.path.join(SAMPLES_STORAGE_DIR, target_name)
+    shutil.copy2(audio_file_path, target_path)
+    return target_path
+
 def add_voice_sample(label, audio_file_path, sample_rate=16000):
     """
     Registers a new speaker/voice sample into the local KD-Tree.
+    Can be called multiple times with the same person's name to index multiple voice recordings!
     """
-    audio_signal, _ = librosa.load(audio_file_path, sr=sample_rate)
+    persisted_path = _persist_audio_sample(audio_file_path, "voice", label)
+    audio_signal, _ = librosa.load(persisted_path, sr=sample_rate)
     feat = extract_voice_feature(audio_signal, sample_rate)
     tree = get_voice_tree()
-    tree.add_item(label, audio_file_path, feat)
-    return {"status": "success", "label": label, "total_samples": len(tree.items)}
+    tree.add_item(label, persisted_path, feat)
+    stats = tree.get_label_stats()
+    return {
+        "status": "success",
+        "label": label,
+        "sample_count_for_label": stats.get(label, 1),
+        "total_samples": len(tree.items),
+        "saved_path": persisted_path
+    }
 
 def add_song_sample(label, audio_file_path, sample_rate=16000):
     """
     Registers a new song sample into the local KD-Tree.
     """
-    audio_signal, _ = librosa.load(audio_file_path, sr=sample_rate)
+    persisted_path = _persist_audio_sample(audio_file_path, "song", label)
+    audio_signal, _ = librosa.load(persisted_path, sr=sample_rate)
     feat = extract_song_feature(audio_signal, sample_rate)
     tree = get_song_tree()
-    tree.add_item(label, audio_file_path, feat)
-    return {"status": "success", "label": label, "total_samples": len(tree.items)}
+    tree.add_item(label, persisted_path, feat)
+    stats = tree.get_label_stats()
+    return {
+        "status": "success",
+        "label": label,
+        "sample_count_for_label": stats.get(label, 1),
+        "total_samples": len(tree.items),
+        "saved_path": persisted_path
+    }
 
 def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=16000, top_k=3, match_type="song"):
     """
@@ -56,7 +94,6 @@ def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=1600
         if audio_signal is not None:
             query_vec = extract_song_feature(audio_signal, sample_rate)
         elif audio_embeddings is not None:
-            # Fallback for backward compatibility if only embeddings passed
             query_vec = np.pad(audio_embeddings.flatten(), (0, max(0, 274 - len(audio_embeddings.flatten()))))[:274]
         else:
             return {"status": "error", "reason": "No audio signal or embeddings provided"}
@@ -70,7 +107,7 @@ def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=1600
             "message": "Local tree index is empty. Add reference samples to index."
         }
 
-    matches = tree.query(query_vec, top_k=top_k)
+    matches = tree.query(query_vec, top_k=top_k, aggregate_by_label=True)
     best_match = matches[0] if matches else None
     sim = best_match["similarity"] if best_match else 0.0
 
