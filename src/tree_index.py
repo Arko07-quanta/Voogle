@@ -48,6 +48,31 @@ class AudioTreeIndex:
         self._rebuild_tree()
         self.save()
 
+    def add_items_batch(self, items_list):
+        """
+        Batch adds audio samples: items_list is a list of (label, file_path, vector).
+        Rebuilds and saves the tree once after adding all vectors.
+        """
+        new_vectors = []
+        for label, file_path, vector in items_list:
+            v = np.asarray(vector, dtype=np.float32).flatten()
+            if len(v) != self.dimension:
+                continue
+            norm = np.linalg.norm(v)
+            unit_v = v / (norm + 1e-12)
+            self.items.append({"id": len(self.items), "label": label, "path": file_path})
+            new_vectors.append(unit_v)
+            
+        if new_vectors:
+            stacked_new = np.vstack(new_vectors)
+            if self.vectors.shape[0] == 0:
+                self.vectors = stacked_new
+            else:
+                self.vectors = np.vstack([self.vectors, stacked_new])
+                
+        self._rebuild_tree()
+        self.save()
+
     def _rebuild_tree(self):
         if self.vectors.shape[0] > 0:
             self.tree = KDTree(self.vectors)

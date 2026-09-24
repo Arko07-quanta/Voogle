@@ -1,87 +1,73 @@
+import os
+import shutil
+import uuid
 import numpy as np
 import librosa
+from src.tree_index import AudioTreeIndex
+from src.signature_extractors import extract_emotion_feature
 
-def compute_tkeo(signal):
-    """
-    Computes the Teager-Kaiser Energy Operator (TKEO).
-    Psi[x(n)] = x^2(n) - x(n-1)x(n+1)
-    """
-    tkeo = np.zeros_like(signal)
-    # Exclude the boundaries
-    tkeo[1:-1] = signal[1:-1]**2 - signal[:-2] * signal[2:]
-    return np.mean(tkeo[1:-1])
+SAMPLES_STORAGE_DIR = "datasets/emotions"
+os.makedirs(SAMPLES_STORAGE_DIR, exist_ok=True)
 
-def compute_hnr(audio_signal, sample_rate):
+_emotion_tree = None
+
+def get_emotion_tree(storage_dir="indexes"):
+    global _emotion_tree
+    if _emotion_tree is None:
+        _emotion_tree = AudioTreeIndex("emotions", dimension=32, storage_dir=storage_dir)
+    return _emotion_tree
+
+def add_emotion_sample(label, audio_file_path, sample_rate=16000):
     """
-    Computes a mock Harmonic-to-Noise Ratio (HNR).
-    True HNR requires complex pitch tracking and cepstral analysis.
-    Here we approximate it using the autocorrelation of the signal.
+    Registers a new sample of an emotion into the local emotion KD-Tree.
+    Saves a copy of the recorded/uploaded audio.
     """
-    autocorr = librosa.autocorrelate(audio_signal, max_size=int(sample_rate/50))
-    if len(autocorr) < 2:
-        return 0
-    # Peak corresponding to the fundamental frequency
-    # We ignore the zero-lag peak by starting from lag > 0
-    zero_crossings = np.where(np.diff(np.sign(autocorr)))[0]
-    if len(zero_crossings) == 0:
-        return 0
-        
-    first_zero = zero_crossings[0]
-    if first_zero >= len(autocorr) - 1:
-        return 0
-        
-    harmonic_peak = np.max(autocorr[first_zero:])
-    noise_floor = autocorr[0] - harmonic_peak
-    
-    if noise_floor <= 0:
-        return 20.0 # High HNR limit
-        
-    hnr = 10 * np.log10((harmonic_peak + 1e-12) / (noise_floor + 1e-12))
-    return hnr
+    safe_label = "".join([c if c.isalnum() else "_" for c in label]).strip("_")
+    unique_id = uuid.uuid4().hex[:8]
+    ext = os.path.splitext(audio_file_path)[1] or ".wav"
+    target_path = os.path.join(SAMPLES_STORAGE_DIR, f"user_emotion_{safe_label}_{unique_id}{ext}")
+    shutil.copy2(audio_file_path, target_path)
+
+    audio_signal, _ = librosa.load(target_path, sr=sample_rate)
+    feat = extract_emotion_feature(audio_signal, sample_rate)
+    tree = get_emotion_tree()
+    tree.add_item(label, target_path, feat)
+    stats = tree.get_label_stats()
+    return {
+        "status": "success",
+        "label": label,
+        "sample_count_for_label": stats.get(label, 1),
+        "total_samples": len(tree.items),
+        "saved_path": target_path
+    }
 
 def process_emotion(audio_signal, sample_rate=16000):
     """
-    Process audio for Emotion Identification using non-linear dynamics.
-    Deploys Teager-Kaiser Energy Operator (TKEO) and Harmonic-to-Noise Ratio (HNR).
+    Process audio for Emotion Identification using classical non-linear features &
+    metric KD-Tree matching against indexed emotion datasets (e.g. RAVDESS).
     """
-    print('Running Hard Math Emotion ID: TKEO Non-Linear Dynamics & HNR...')
+    print('Running Tree-Based Emotion ID: Non-Linear Dynamics & KD-Tree Metric Matching...')
     try:
-        # 1. Non-linear Energy (Arousal indicator / Stress)
-        tkeo_energy = compute_tkeo(audio_signal)
-        # Normalize TKEO magnitude for interpretability
-        tkeo_norm = tkeo_energy * 1000.0 
+        feat = extract_emotion_feature(audio_signal, sample_rate)
+        tree = get_emotion_tree()
         
-        # 2. Harmonic-to-Noise Ratio (Valence / Voice Quality)
-        hnr = compute_hnr(audio_signal, sample_rate)
-        
-        # 3. Micro-tremor extraction (Jitter approximation)
-        f0, _, _ = librosa.pyin(audio_signal, fmin=50, fmax=500, sr=sample_rate)
-        valid_f0 = f0[~np.isnan(f0)]
-        jitter = np.std(np.diff(valid_f0)) / (np.mean(valid_f0) + 1e-6) if len(valid_f0) > 1 else 0.0
-        
-        print(f"Non-Linear Stats -> TKEO: {tkeo_norm:.4f}, HNR: {hnr:.2f}dB, Jitter: {jitter:.4f}")
-        
-        # Matrix transformation into Emotion Space
-        # Emotion = W * Features + Bias
-        
-        arousal = (tkeo_norm * 5.0) + (jitter * 100.0) - 2.0
-        valence = (hnr * 0.5) - (jitter * 50.0)
-        
-        arousal = np.clip(arousal, -5, 5)
-        valence = np.clip(valence, -5, 5)
-        
-        if arousal > 0 and valence > 0:
-            emotion = "Happy / Excited"
-        elif arousal > 0 and valence <= 0:
-            emotion = "Angry / Intense"
-        elif arousal <= 0 and valence < 0:
-            emotion = "Sad / Calm"
-        else:
-            emotion = "Neutral / Relaxed"
+        if len(tree.items) == 0:
+            return {"status": "error", "emotions": "No emotion index found", "matches": []}
             
-        print(f"Projected -> Valence: {valence:.2f}, Arousal: {arousal:.2f}")
-        print(f"Emotion Result: {emotion}")
-        return {"status": "success", "emotions": emotion}
+        matches = tree.query(feat, top_k=4, aggregate_by_label=True)
+        if not matches:
+            return {"status": "error", "emotions": "Unknown", "matches": []}
+            
+        best_match = matches[0]["label"]
+        best_score = matches[0]["similarity"]
+        
+        print(f"Top KD-Tree Emotion Match: {best_match} (Similarity: {best_score:.4f})")
+        return {
+            "status": "success",
+            "emotions": best_match,
+            "similarity": best_score,
+            "matches": matches
+        }
     except Exception as e:
         print(f"Emotion classification failed: {e}")
-        return {"status": "error", "emotions": "Unknown"}
+        return {"status": "error", "emotions": "Unknown", "reason": str(e)}
