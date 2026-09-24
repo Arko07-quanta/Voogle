@@ -63,7 +63,7 @@ class VooglePipeline:
         if 'Emotion' in selected_tasks:
             results['emotion'] = process_emotion(audio_signal)
         if 'Retrieval' in selected_tasks:
-            results['retrieval'] = process_retrieval(embeddings) 
+            results['retrieval'] = process_retrieval(audio_signal=audio_signal, audio_embeddings=embeddings) 
         if 'Transcription' in selected_tasks:
             results['transcription'] = process_transcription(audio_signal)
         if 'Language' in selected_tasks:

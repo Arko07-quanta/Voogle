@@ -5,22 +5,16 @@ Team Name: yes, this_is_fft
 
 ## Description
 
-Voogle is an intelligent, multi-purpose audio analysis and recognition application designed to process and extract meaningful information from complex audio clips. The platform serves as an end-to-end processing pipeline utilizing state-of-the-art classical signal processing. By extracting and analyzing acoustic features, Voogle can perform a wide array of audio-centric tasks purely through algorithmic signal manipulation.
+Voogle is an intelligent, multi-purpose audio analysis and recognition application designed to process and extract meaningful information from complex audio clips. The platform serves as an end-to-end processing pipeline utilizing state-of-the-art classical signal processing and classical spatial tree search structures (KD-Trees). By extracting and analyzing acoustic features, Voogle can perform a wide array of audio-centric tasks purely through algorithmic signal manipulation and metric space nearest-neighbor queries without any heavy neural network models.
 
 ## Key Features
 
-*   **Speaker Detection & Diarization:** Identifies and clusters multiple speakers using Voice Activity Detection and MFCC clustering.
-*   **Emotion Identification:** Analyzes vocal tones, pitch variations, and speech patterns using classical signal analysis heuristics.
-*   **Audio Matching & Retrieval:** Scans and matches specific target audio snippets using cosine similarity on spectral features.
-*   **Speech-to-Text Transcription:** Provides heuristic phoneme-level pseudo-transcription based on onset detection and formant frequency mapping.
-*   **Language & Accent Identification:** Performs heuristic language estimation analyzing rhythm, tempo, and pitch variability.
-*   **Music & Rhythm Search:** Identifies musical properties and beat sequences via Librosa.
-
-## System Architecture & Methodology
-
-*   **Audio Preprocessing:** Window clipping and sliding windows.
-*   **Feature Extraction:** Mel-frequency filter banks and MFCCs.
-*   **Signal Processing Algorithms:** Spectral centroid analysis, onset detection, and statistical clustering.
+*   **Tree-Based Song, Voice & Language Matching:** Constructs local, persistent metric spatial KD-Trees over acoustic descriptors (MFCC statistics, spectral centroid moments, chroma/tonnetz features, and Shifted Delta Cepstral vectors). Allows adding new sample audio to expand datasets dynamically.
+*   **Speaker Detection & Diarization:** Identifies and clusters multiple speakers using Voice Activity Detection (VAD), Normalized Graph Laplacians ($L_{\text{sym}} = I - D^{-1/2}AD^{-1/2}$), and Spectral Bisection along the Fiedler vector.
+*   **Emotion Identification:** Analyzes vocal stress, tone, and quality using the non-linear Teager-Kaiser Energy Operator (TKEO), Harmonic-to-Noise Ratio (HNR) via autocorrelation, and micro-tremor pitch jitter.
+*   **Audio Matching & Retrieval:** Queries unknown audio against your local KD-Tree index using metric cosine distances.
+*   **Speech-to-Text Transcription:** Rigorous Linear Predictive Coding (LPC) via Levinson-Durbin recursion and Dynamic Time Warping (DTW) distance minimization.
+*   **Music & Rhythm Search:** Identifies tempo and rhythmic beat periodicity via Librosa beat-tracking.
 
 ## Getting Started
 
