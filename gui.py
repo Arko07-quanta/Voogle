@@ -9,6 +9,7 @@ from src.tasks.retrieval import (
     get_voice_tree
 )
 from src.tasks.language import add_language_sample, get_language_tree
+from src.tasks.emotion import add_emotion_sample, get_emotion_tree
 
 print("Initializing Voogle Pipeline for GUI...")
 pipeline = VooglePipeline()
@@ -33,17 +34,20 @@ def analyze_audio(audio_path, selected_tasks):
         output += f"📝 Transcription: {trans_text}\n"
     
     if 'Emotion' in selected_tasks:
-        emo_res = results['emotion'].get('emotions', 'N/A')
-        if isinstance(emo_res, list) and len(emo_res) > 0 and 'label' in emo_res[0]:
-            emo_res = emo_res[0]['label']
-        output += f"🎭 Emotion: {emo_res}\n"
+        emo_res = results['emotion']
+        output += f"🎭 Emotion (KD-Tree Match): {emo_res.get('emotions', 'N/A')} (Similarity: {emo_res.get('similarity', 0):.4f})\n"
+        matches = emo_res.get('matches', [])
+        if matches:
+            output += "   KD-Tree Emotion Candidates:\n"
+            for m in matches:
+                output += f"     • {m['label']}: Sim {m['similarity']:.4f}\n"
     
     if 'Language' in selected_tasks:
         lang_res = results['language']
-        output += f"🌍 Top Language Match: {lang_res.get('language', 'N/A')} (Similarity: {lang_res.get('similarity', 0):.4f})\n"
+        output += f"🌍 Language (KD-Tree Match): {lang_res.get('language', 'N/A')} (Similarity: {lang_res.get('similarity', 0):.4f})\n"
         matches = lang_res.get('matches', [])
         if matches:
-            output += "   KD-Tree Candidates:\n"
+            output += "   KD-Tree Language Candidates:\n"
             for m in matches:
                 output += f"     • {m['label']}: Sim {m['similarity']:.4f}\n"
     
@@ -75,32 +79,40 @@ def add_to_tree_dataset(audio_path, label, dataset_type):
     if not audio_path:
         return "❌ Error: Please record or upload an audio file first."
     if not label or not label.strip():
-        return "❌ Error: Please provide a label or person's name (e.g. 'Alice', 'John')."
+        return "❌ Error: Please provide a label or person's name (e.g. 'Alice', 'John', 'happy')."
     
     clean_label = label.strip()
     try:
         if dataset_type == "Voice":
             res = add_voice_sample(clean_label, audio_path)
             return (
-                f"✅ Added recording for voice: '{clean_label}'!\n"
-                f"• Recordings for this person: {res['sample_count_for_label']}\n"
+                f"✅ Added voice sample to 'datasets/voices/': '{clean_label}'!\n"
+                f"• Samples for this person: {res['sample_count_for_label']}\n"
                 f"• Total voice samples in KD-Tree: {res['total_samples']}\n"
                 f"• Saved at: {res['saved_path']}"
             )
         elif dataset_type == "Song":
             res = add_song_sample(clean_label, audio_path)
             return (
-                f"✅ Added recording for song: '{clean_label}'!\n"
-                f"• Recordings for this track: {res['sample_count_for_label']}\n"
+                f"✅ Added song sample to 'datasets/songs/': '{clean_label}'!\n"
+                f"• Samples for this track: {res['sample_count_for_label']}\n"
                 f"• Total song samples in KD-Tree: {res['total_samples']}\n"
                 f"• Saved at: {res['saved_path']}"
             )
         elif dataset_type == "Language":
             res = add_language_sample(clean_label, audio_path)
             return (
-                f"✅ Added sample for language: '{clean_label}'!\n"
+                f"✅ Added language sample to 'datasets/languages/': '{clean_label}'!\n"
                 f"• Samples for this language: {res['sample_count_for_label']}\n"
                 f"• Total language samples in KD-Tree: {res['total_samples']}\n"
+                f"• Saved at: {res['saved_path']}"
+            )
+        elif dataset_type == "Emotion":
+            res = add_emotion_sample(clean_label, audio_path)
+            return (
+                f"✅ Added emotion sample to 'datasets/emotions/': '{clean_label}'!\n"
+                f"• Samples for this emotion: {res['sample_count_for_label']}\n"
+                f"• Total emotion samples in KD-Tree: {res['total_samples']}\n"
                 f"• Saved at: {res['saved_path']}"
             )
         else:
@@ -132,9 +144,18 @@ def list_indexed_trees():
     song_tree = get_song_tree()
     voice_tree = get_voice_tree()
     lang_tree = get_language_tree()
+    emo_tree = get_emotion_tree()
     
     out = "=== Locally Indexed Metric Trees ===\n\n"
     
+    emo_stats = emo_tree.get_label_stats()
+    out += f"🎭 Emotions Tree ({len(emo_tree.items)} total samples across {len(emo_stats)} emotions):\n"
+    for emo, count in emo_stats.items():
+        out += f"  - Emotion '{emo}': {count} sample(s)\n"
+    if not emo_stats:
+        out += "  (No emotions indexed yet)\n"
+
+    out += "\n" + "-"*40 + "\n"
     voice_stats = voice_tree.get_label_stats()
     out += f"🗣️ Voices Tree ({len(voice_tree.items)} total recordings across {len(voice_stats)} people):\n"
     for person, count in voice_stats.items():
@@ -169,7 +190,7 @@ with gr.Blocks(title="Voogle - Voice Search & Signal Tree Matcher") as demo:
                 task_selector = gr.CheckboxGroup(
                     ["Diarization", "Emotion", "Retrieval", "Transcription", "Language", "Music"],
                     label="Select Tasks to Run",
-                    value=["Transcription", "Language", "Retrieval"]
+                    value=["Emotion", "Language", "Retrieval"]
                 )
                 analyze_btn = gr.Button("Analyze Audio", variant="primary")
             with gr.Column():
@@ -179,15 +200,15 @@ with gr.Blocks(title="Voogle - Voice Search & Signal Tree Matcher") as demo:
 
     with gr.Tab("🌲 Record & Add to Tree Datasets"):
         gr.Markdown(
-            "### Add new reference audio to your local KD-Tree dataset.\n"
-            "- You can record **multiple audio clips for the same person** (e.g. Alice in different tones or days). The tree groups them together and matches whoever has the closest acoustic signature!\n"
-            "- Recorded audio is saved locally into `datasets/audio_samples/` and immediately indexed into the KD-Tree."
+            "### Add new reference audio to your local KD-Tree datasets.\n"
+            "- Files are neatly organized into separate folders: `datasets/emotions/`, `datasets/voices/`, `datasets/languages/`, and `datasets/songs/`.\n"
+            "- You can record **multiple audio clips for the same person or class**! The KD-Tree groups them together and matches whoever has the closest acoustic signature."
         )
         with gr.Row():
             with gr.Column():
                 sample_audio = gr.Audio(type="filepath", sources=["microphone", "upload"], label="Record from Mic or Upload Sample")
-                sample_label = gr.Textbox(label="Person Name / Song Title / Language", placeholder="e.g. 'Alice', 'Bob', 'Coldplay - Yellow', 'French'")
-                dataset_type = gr.Radio(["Voice", "Song", "Language"], label="Tree Index Target", value="Voice")
+                sample_label = gr.Textbox(label="Label / Person / Song / Language / Emotion", placeholder="e.g. 'Alice', 'happy', 'Spanish', 'Track A'")
+                dataset_type = gr.Radio(["Voice", "Song", "Language", "Emotion"], label="Tree Index Target", value="Voice")
                 add_btn = gr.Button("Save & Index into KD-Tree", variant="primary")
                 add_status = gr.Textbox(label="Status / Confirmation", lines=5)
             with gr.Column():

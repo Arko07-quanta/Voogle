@@ -7,8 +7,10 @@ from src.tree_index import AudioTreeIndex
 from src.signature_extractors import extract_voice_feature, extract_song_feature
 
 # Directory to permanently archive recorded/uploaded dataset files
-SAMPLES_STORAGE_DIR = "datasets/audio_samples"
-os.makedirs(SAMPLES_STORAGE_DIR, exist_ok=True)
+VOICES_STORAGE_DIR = "datasets/voices"
+SONGS_STORAGE_DIR = "datasets/songs"
+os.makedirs(VOICES_STORAGE_DIR, exist_ok=True)
+os.makedirs(SONGS_STORAGE_DIR, exist_ok=True)
 
 # Shared tree instances
 _voice_tree = None
@@ -35,8 +37,9 @@ def _persist_audio_sample(audio_file_path, category, label):
     ext = os.path.splitext(audio_file_path)[1]
     if not ext:
         ext = ".wav"
+    folder = VOICES_STORAGE_DIR if category == "voice" else SONGS_STORAGE_DIR
     target_name = f"{category}_{safe_label}_{unique_id}{ext}"
-    target_path = os.path.join(SAMPLES_STORAGE_DIR, target_name)
+    target_path = os.path.join(folder, target_name)
     shutil.copy2(audio_file_path, target_path)
     return target_path
 

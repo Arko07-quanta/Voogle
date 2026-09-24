@@ -2,4 +2,21 @@ __pycache__/
 *.wav
 *.mp3
 *.flac
-.venv
+*.ogg
+*.m4a
+.venv/
+
+# Archives & partial downloads
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.part
+
+# Datasets and all raw audio contents
+datasets/
+!datasets/**/.gitkeep
+
+# Index vectors, metadata and cache binaries (generated locally)
+indexes/*
+!indexes/.gitkeep

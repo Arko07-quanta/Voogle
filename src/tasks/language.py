@@ -6,8 +6,8 @@ import librosa
 from src.tree_index import AudioTreeIndex
 from src.signature_extractors import extract_language_feature
 
-SAMPLES_STORAGE_DIR = "datasets/audio_samples"
-os.makedirs(SAMPLES_STORAGE_DIR, exist_ok=True)
+LANGUAGES_STORAGE_DIR = "datasets/languages"
+os.makedirs(LANGUAGES_STORAGE_DIR, exist_ok=True)
 
 _language_tree = None
 
@@ -36,7 +36,7 @@ def add_language_sample(label, audio_file_path, sample_rate=16000):
     safe_label = "".join([c if c.isalnum() else "_" for c in label]).strip("_")
     unique_id = uuid.uuid4().hex[:8]
     ext = os.path.splitext(audio_file_path)[1] or ".wav"
-    target_path = os.path.join(SAMPLES_STORAGE_DIR, f"language_{safe_label}_{unique_id}{ext}")
+    target_path = os.path.join(LANGUAGES_STORAGE_DIR, f"language_{safe_label}_{unique_id}{ext}")
     shutil.copy2(audio_file_path, target_path)
 
     audio_signal, _ = librosa.load(target_path, sr=sample_rate)
