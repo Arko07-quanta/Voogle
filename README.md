@@ -41,6 +41,7 @@ Voogle is designed to make adding your own local datasets seamless. All datasets
 
 ```text
 datasets/
+<<<<<<< HEAD
 ├── emotions/           # Raw emotion audio files (e.g. RAVDESS Actor_01/ ... Actor_24/)
 │   └── Actor_01/
 │       └── 03-01-01-...wav
@@ -111,12 +112,22 @@ datasets/
 ### Adding Audio via the GUI (Any Dataset Type)
 
 For adding individual audio clips to any tree at runtime:
+=======
+├── emotions/     # Raw emotion audio files (e.g. RAVDESS actor folders)
+├── languages/    # Custom language speech recordings
+├── songs/        # Track samples and music recordings
+└── voices/       # Multi-sample speaker voice recordings
+```
+
+### Option A: Using the Graphical Interface (Easiest)
+>>>>>>> refs/remotes/origin/main
 
 1. Launch the web UI:
    ```bash
    python gui.py
    ```
 2. Navigate to the **"🌲 Record & Add to Tree Datasets"** tab.
+<<<<<<< HEAD
 3. Record from your microphone or upload a file, enter a label, pick a target (**Voice**, **Song**, **Language**, or **Emotion**), and click **"Save & Index into KD-Tree"**.
    - Files are archived into `datasets/<target>/` and immediately indexed.
    - **Multiple recordings per label are supported** — the tree aggregates them and ranks by best/average cosine similarity.
@@ -137,6 +148,46 @@ add_song_sample(label="Beethoven - Symphony 5", audio_file_path="symphony.wav")
 add_language_sample(label="French", audio_file_path="bonjour.wav")
 add_emotion_sample(label="happy", audio_file_path="laughing.wav")
 ```
+=======
+3. Choose your audio input:
+   - **Record live from your microphone** (e.g., say a sentence or sing a phrase).
+   - **Upload an audio file** (`.wav`, `.mp3`, `.flac`, etc.).
+4. Enter an identifier/label (e.g., person's name like `"Alice"`, a song title, or a language name).
+5. Select the target dataset (**Voice**, **Song**, **Language**, or **Emotion**).
+6. Click **"Save & Index into KD-Tree"**.
+   - The file is archived into `datasets/<target>/` and indexed into the corresponding KD-Tree.
+   - You can record **multiple audio clips under the same person or class**; the KD-Tree groups them together automatically and calculates both best and average similarities during queries.
+
+### Option B: Batch Indexing from a Downloaded Dataset (e.g., RAVDESS)
+
+If you have downloaded a dataset as a zip file (e.g., `emotions.zip`):
+
+1. **Extract into the dataset folder:**
+   ```bash
+   unzip emotions.zip -d datasets/emotions/
+   ```
+2. **Build / Rebuild the KD-Tree model:**
+   Run the dedicated builder script:
+   ```bash
+   python build_emotion_tree.py
+   ```
+   This will process the `.wav` files, extract 32-D classical acoustic signatures, and write the metric tree directly to `indexes/emotions_meta.json` and `indexes/emotions_vectors.npy`.
+
+3. **Building other datasets programmatically:**
+   You can index any directory of audio clips using Python:
+   ```python
+   from src.tasks.retrieval import add_voice_sample, add_song_sample
+   from src.tasks.language import add_language_sample
+
+   # Add speaker samples
+   add_voice_sample(label="Alice", audio_file_path="path/to/alice_sample1.wav")
+   add_voice_sample(label="Alice", audio_file_path="path/to/alice_sample2.wav")
+
+   # Add songs or languages
+   add_song_sample(label="Track 1", audio_file_path="path/to/song.wav")
+   add_language_sample(label="French", audio_file_path="path/to/french_speech.wav")
+   ```
+>>>>>>> refs/remotes/origin/main
 
 ---
 
