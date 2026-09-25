@@ -47,7 +47,8 @@ def build_emotion_tree(emotions_dir="datasets/emotions", storage_dir="indexes", 
         if len(parts) >= 3 and parts[2] in RAVDESS_EMOTIONS:
             emotion_label = RAVDESS_EMOTIONS[parts[2]]
         else:
-            emotion_label = "unknown"
+            folder_name = os.path.basename(os.path.dirname(path)).lower()
+            emotion_label = folder_name if folder_name else "unknown"
             
         current_cnt = counts.get(emotion_label, 0)
         if current_cnt >= max_per_class:
@@ -68,7 +69,7 @@ def build_emotion_tree(emotions_dir="datasets/emotions", storage_dir="indexes", 
     emotion_tree.add_items_batch(items_to_add)
     t_elapsed = time.time() - t0
     
-    print("\n✅ Emotion KD-Tree built successfully!")
+    print("\nEmotion KD-Tree built successfully!")
     print(f"Time taken: {t_elapsed:.2f}s")
     print(f"Total samples indexed: {len(emotion_tree.items)}")
     print("Class distribution:")

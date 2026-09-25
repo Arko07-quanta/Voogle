@@ -128,3 +128,43 @@ def extract_emotion_feature(audio_signal, sample_rate=16000):
     extra_dynamics = np.array([tkeo_val, hnr_val, rolloff_mean, zcr_mean, onset_mean, onset_std], dtype=np.float32)
     feature = np.concatenate([mfcc_mean, mfcc_std, extra_dynamics])
     return feature.astype(np.float32)
+
+from scipy.ndimage import maximum_filter
+import hashlib
+
+def extract_constellation_hashes(audio_signal, sample_rate=16000):
+    stft = librosa.stft(audio_signal, n_fft=2048, hop_length=512)
+    magnitude = np.abs(stft)
+    
+    neighborhood_size = 15
+    local_max = maximum_filter(magnitude, size=neighborhood_size) == magnitude
+    
+    threshold = np.mean(magnitude) * 3
+    peaks_mask = local_max & (magnitude > threshold)
+    
+    freq_bins, time_frames = np.where(peaks_mask)
+    
+    sort_idx = np.argsort(time_frames)
+    freq_bins = freq_bins[sort_idx]
+    time_frames = time_frames[sort_idx]
+    
+    target_zone_size = 5
+    hashes = []
+    
+    for i in range(len(time_frames)):
+        t1 = time_frames[i]
+        f1 = freq_bins[i]
+        
+        for j in range(1, target_zone_size + 1):
+            if i + j < len(time_frames):
+                t2 = time_frames[i + j]
+                f2 = freq_bins[i + j]
+                
+                delta_t = t2 - t1
+                
+                if 0 < delta_t < 100:
+                    hash_str = f"{f1}|{f2}|{delta_t}"
+                    h = int(hashlib.md5(hash_str.encode('utf-8')).hexdigest()[:8], 16)
+                    hashes.append((h, t1))
+                    
+    return hashes

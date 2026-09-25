@@ -68,7 +68,7 @@ def build_language_tree(languages_dir="datasets/languages", storage_dir="indexes
     language_tree.add_items_batch(items_to_add)
     t_elapsed = time.time() - t0
     
-    print("\n✅ Language KD-Tree built successfully!")
+    print("\nLanguage KD-Tree built successfully!")
     print(f"Time taken: {t_elapsed:.2f}s")
     print(f"Total samples indexed: {len(language_tree.items)}")
     print("Class distribution:")

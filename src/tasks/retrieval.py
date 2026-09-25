@@ -121,3 +121,99 @@ def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=1600
         "best_match": best_match,
         "similarity": sim
     }
+
+# --- NEW: Partial Matching Functions ---
+from src.fingerprint_index import FingerprintIndex
+from src.signature_extractors import extract_constellation_hashes
+import collections
+
+_fingerprint_db = None
+_song_window_tree = None
+
+def get_fingerprint_db():
+    global _fingerprint_db
+    if _fingerprint_db is None:
+        _fingerprint_db = FingerprintIndex()
+    return _fingerprint_db
+
+def get_song_window_tree():
+    global _song_window_tree
+    if _song_window_tree is None:
+        _song_window_tree = AudioTreeIndex("songs_window", dimension=274)
+    return _song_window_tree
+
+def add_song_sample_window(label, audio_file_path, sample_rate=16000):
+    """
+    Sliding-Window KD-Tree approach for partial matching.
+    """
+    audio_signal, _ = librosa.load(audio_file_path, sr=sample_rate)
+    window_sec = 3.0
+    hop_sec = 1.5
+    window_length = int(window_sec * sample_rate)
+    hop_length = int(hop_sec * sample_rate)
+    
+    tree = get_song_window_tree()
+    items_to_add = []
+    
+    # Pad signal if too short
+    if len(audio_signal) < window_length:
+        audio_signal = np.pad(audio_signal, (0, window_length - len(audio_signal)))
+        
+    for start in range(0, len(audio_signal) - window_length + 1, hop_length):
+        chunk = audio_signal[start : start + window_length]
+        feat = extract_song_feature(chunk, sample_rate)
+        items_to_add.append((label, audio_file_path, feat))
+        
+    tree.add_items_batch(items_to_add)
+    return {"status": "success", "indexed_chunks": len(items_to_add)}
+
+def process_retrieval_window(audio_signal, sample_rate=16000):
+    """
+    Retrieves via sliding windows and majority vote.
+    """
+    window_sec = 3.0
+    hop_sec = 1.5
+    window_length = int(window_sec * sample_rate)
+    hop_length = int(hop_sec * sample_rate)
+    
+    tree = get_song_window_tree()
+    if len(tree.items) == 0:
+        return {"best_match": None, "score": 0}
+        
+    if len(audio_signal) < window_length:
+        audio_signal = np.pad(audio_signal, (0, window_length - len(audio_signal)))
+        
+    votes = collections.defaultdict(float)
+    
+    for start in range(0, len(audio_signal) - window_length + 1, hop_length):
+        chunk = audio_signal[start : start + window_length]
+        feat = extract_song_feature(chunk, sample_rate)
+        matches = tree.query(feat, top_k=3, aggregate_by_label=False)
+        for m in matches:
+            votes[m["label"]] += m["similarity"]
+            
+    if not votes:
+        return {"best_match": None, "score": 0}
+        
+    best_label = max(votes, key=votes.get)
+    return {"best_match": best_label, "score": votes[best_label]}
+
+
+def add_song_sample_fingerprint(label, audio_file_path, sample_rate=16000):
+    """
+    Shazam-style fingerprinting approach for perfect matching.
+    """
+    audio_signal, _ = librosa.load(audio_file_path, sr=sample_rate)
+    hashes = extract_constellation_hashes(audio_signal, sample_rate)
+    db = get_fingerprint_db()
+    db.add_hashes(label, hashes)
+    return {"status": "success", "indexed_hashes": len(hashes)}
+
+def process_retrieval_fingerprint(audio_signal, sample_rate=16000):
+    """
+    Retrieves via fingerprint hashes and time-offset Hough Transform.
+    """
+    hashes = extract_constellation_hashes(audio_signal, sample_rate)
+    db = get_fingerprint_db()
+    best_label, max_peaks = db.query(hashes)
+    return {"best_match": best_label, "score": max_peaks}
