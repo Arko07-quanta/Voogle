@@ -67,11 +67,11 @@ def analyze_audio(audio_path, selected_tasks):
         ret_res = results['retrieval']
         best_match = ret_res.get('best_match')
         if best_match:
-            output += f"🔍 KD-Tree Song Match: {best_match['label']} (Similarity: {best_match['similarity']:.4f}, Samples in Index: {best_match.get('sample_count', 1)})\n"
+            output += f"🔍 Song Match: {best_match['label']} (Confidence Score: {best_match['similarity']:.4f})\n"
             for m in ret_res.get('matches', []):
                 output += f"     • {m['label']}: Best Sim {m['similarity']:.4f} (Avg: {m.get('avg_similarity', m['similarity']):.4f})\n"
         else:
-            output += f"🔍 Retrieval: {ret_res.get('message', 'No indexed items')}\n"
+            output += f"🔍 Retrieval: {ret_res.get('message', 'No indexed items found')}\n"
         
     return output
 

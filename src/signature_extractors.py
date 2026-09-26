@@ -115,6 +115,7 @@ def extract_emotion_feature(audio_signal, sample_rate=16000):
     tkeo_val = compute_tkeo(audio_signal) * 1000.0
     hnr_val = compute_hnr(audio_signal, sample_rate)
     
+    #85 % energy
     rolloff = librosa.feature.spectral_rolloff(y=audio_signal, sr=sample_rate)
     rolloff_mean = float(np.mean(rolloff))
     

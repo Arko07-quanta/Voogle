@@ -7,6 +7,7 @@ from src.tree_index import AudioTreeIndex
 from src.signature_extractors import extract_language_feature
 
 LANGUAGE_NAMES = {
+    "bn": "Bangla (Bengali)",
     "de": "German (Deutsch)",
     "en": "English",
     "es": "Spanish (Español)"

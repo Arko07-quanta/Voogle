@@ -64,26 +64,15 @@ def add_voice_sample(label, audio_file_path, sample_rate=16000):
 
 def add_song_sample(label, audio_file_path, sample_rate=16000):
     """
-    Registers a new song sample into the local KD-Tree.
+    Registers a new song sample into the local database using Shazam-style fingerprinting.
     """
-    persisted_path = _persist_audio_sample(audio_file_path, "song", label)
-    audio_signal, _ = librosa.load(persisted_path, sr=sample_rate)
-    feat = extract_song_feature(audio_signal, sample_rate)
-    tree = get_song_tree()
-    tree.add_item(label, persisted_path, feat)
-    stats = tree.get_label_stats()
-    return {
-        "status": "success",
-        "label": label,
-        "sample_count_for_label": stats.get(label, 1),
-        "total_samples": len(tree.items),
-        "saved_path": persisted_path
-    }
+    print("Using Shazam-style fingerprinting to index song...")
+    return add_song_sample_fingerprint(label, audio_file_path, sample_rate)
 
 def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=16000, top_k=3, match_type="song"):
     """
-    Process Audio Matching & Retrieval using local classical KD-Tree index.
-    Matches against indexed songs or voices.
+    Process Audio Matching & Retrieval using Shazam-style fingerprinting for songs,
+    or KD-Tree for voices.
     """
     print(f"Running Tree-Based Audio Matching & Retrieval ({match_type})...")
     
@@ -92,35 +81,33 @@ def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=1600
         if audio_signal is None:
             return {"status": "error", "reason": "audio_signal required for voice matching"}
         query_vec = extract_voice_feature(audio_signal, sample_rate)
+        
+        if len(tree.items) == 0:
+            return {"status": "success", "matches": [], "best_match": None, "similarity": 0.0, "message": "Voice index empty."}
+            
+        matches = tree.query(query_vec, top_k=top_k, aggregate_by_label=True)
+        best_match = matches[0] if matches else None
+        sim = best_match["similarity"] if best_match else 0.0
+        return {"status": "success", "matches": matches, "best_match": best_match, "similarity": sim}
+        
     else:
-        tree = get_song_tree()
-        if audio_signal is not None:
-            query_vec = extract_song_feature(audio_signal, sample_rate)
-        elif audio_embeddings is not None:
-            query_vec = np.pad(audio_embeddings.flatten(), (0, max(0, 274 - len(audio_embeddings.flatten()))))[:274]
-        else:
-            return {"status": "error", "reason": "No audio signal or embeddings provided"}
-
-    if len(tree.items) == 0:
+        # USE FINGERPRINTING FOR SONGS
+        if audio_signal is None:
+            return {"status": "error", "reason": "No audio signal provided"}
+            
+        print("Using Shazam-style constellation fingerprinting...")
+        res = process_retrieval_fingerprint(audio_signal, sample_rate)
+        
+        best = res["best_match"]
+        score = res["score"]
+        
+        print(f"Fingerprint search complete. Best match: {best} (Hough peaks: {score})")
         return {
             "status": "success",
             "matches": [],
-            "best_match": None,
-            "similarity": 0.0,
-            "message": "Local tree index is empty. Add reference samples to index."
+            "best_match": {"label": best, "similarity": score} if best else None,
+            "similarity": score
         }
-
-    matches = tree.query(query_vec, top_k=top_k, aggregate_by_label=True)
-    best_match = matches[0] if matches else None
-    sim = best_match["similarity"] if best_match else 0.0
-
-    print(f"Tree search complete. Best match: {best_match['label'] if best_match else 'None'} (Similarity: {sim:.4f})")
-    return {
-        "status": "success",
-        "matches": matches,
-        "best_match": best_match,
-        "similarity": sim
-    }
 
 # --- NEW: Partial Matching Functions ---
 from src.fingerprint_index import FingerprintIndex

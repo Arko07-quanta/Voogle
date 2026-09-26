@@ -85,39 +85,86 @@ def process_transcription(audio_signal, sample_rate=16000):
         if len(lpc_features) == 0:
             return {"status": "success", "text": ""}
             
-        # Mock "Ideal" Phoneme LPC Templates for DTW matching
-        # In a real classical system, these templates are pre-computed from a clean corpus
-        np.random.seed(42)
-        mock_templates = {
-            "hello": np.random.randn(15, 12) * 0.5,
-            "voogle": np.random.randn(20, 12) * 0.5,
-            "search": np.random.randn(18, 12) * 0.5,
-            "engine": np.random.randn(16, 12) * 0.5
-        }
+        import os
+        template_path = "datasets/transcription_templates.npy"
+        if os.path.exists(template_path):
+            mock_templates = np.load(template_path, allow_pickle=True).item()
+        else:
+            np.random.seed(42)
+            mock_templates = {
+                "hello": np.random.randn(15, 12) * 0.5,
+                "voogle": np.random.randn(20, 12) * 0.5,
+                "search": np.random.randn(18, 12) * 0.5,
+                "engine": np.random.randn(16, 12) * 0.5
+            }
         
-        # Sub-sequence matching via sliding DTW window
-        # We will match small chunks of the incoming LPCs against the dictionary
-        step = 20
-        transcription = []
-        for start in range(0, len(lpc_features) - step, step):
-            chunk = lpc_features[start : start + step]
-            
-            best_match = None
-            min_dist = float('inf')
-            
-            for word, template in mock_templates.items():
-                dist = dtw_distance(chunk, template)
-                # Normalize by path length approx
-                norm_dist = dist / (len(chunk) + len(template))
-                if norm_dist < min_dist:
-                    min_dist = norm_dist
-                    best_match = word
-                    
-            if min_dist < 2.0: # Threshold for a match
-                transcription.append(best_match)
+        # Hybrid Approach: VAD + Subsequence DTW
+        intervals = librosa.effects.split(audio_signal, top_db=20)
+        
+        final_transcription = []
+        
+        for start_i, end_i in intervals:
+            segment = audio_signal[start_i:end_i]
+            if len(segment) < int(sample_rate * 0.2):
+                continue
                 
-        # Remove consecutive duplicates
-        final_transcription = [v for i, v in enumerate(transcription) if i == 0 or v != transcription[i-1]]
+            pre_emp = np.append(segment[0], segment[1:] - 0.97 * segment[:-1])
+            frames = librosa.util.frame(pre_emp, frame_length=frame_length, hop_length=hop_length).T
+            
+            segment_lpcs = []
+            for frame in frames:
+                lpc = extract_lpc(frame * window, order=12)
+                segment_lpcs.append(lpc[1:])
+            segment_lpcs = np.array(segment_lpcs)
+            
+            if len(segment_lpcs) == 0:
+                continue
+                
+            # If the segment is very short (like an isolated word), do 1-shot DTW
+            if len(segment_lpcs) < 100:
+                best_match = None
+                min_dist = float('inf')
+                for word, template in mock_templates.items():
+                    dist = dtw_distance(segment_lpcs, template)
+                    norm_dist = dist / (len(segment_lpcs) + len(template))
+                    if norm_dist < min_dist:
+                        min_dist = norm_dist
+                        best_match = word
+                if min_dist < 3.0:
+                    final_transcription.append(best_match)
+                    
+            # If the segment is long (continuous speech), do Subsequence DTW
+            else:
+                step = 15
+                window_size = 50
+                matches_found = []
+                
+                for start in range(0, len(segment_lpcs) - window_size, step):
+                    chunk = segment_lpcs[start : start + window_size]
+                    if np.mean(np.abs(chunk)) < 0.05:
+                        continue
+                        
+                    best_match = None
+                    min_dist = float('inf')
+                    for word, template in mock_templates.items():
+                        dist = dtw_distance(chunk, template)
+                        norm_dist = dist / (len(chunk) + len(template))
+                        if norm_dist < min_dist:
+                            min_dist = norm_dist
+                            best_match = word
+                            
+                    if min_dist < 1.7:
+                        matches_found.append((start, best_match, min_dist))
+                        
+                # Non-maximum suppression for continuous chunk
+                last_start = -999
+                for start, word, dist in sorted(matches_found, key=lambda x: x[0]):
+                    if start - last_start > 30:
+                        final_transcription.append(word)
+                        last_start = start
+                        
+        # Remove consecutive duplicates globally
+        final_transcription = [v for i, v in enumerate(final_transcription) if i == 0 or v != final_transcription[i-1]]
         
         result_text = " ".join(final_transcription) if final_transcription else "unrecognized"
         
