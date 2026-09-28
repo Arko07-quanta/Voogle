@@ -5,6 +5,7 @@
 \usepackage{amsmath,amssymb,bm}
 \usepackage{tikz}
 \usepackage{listings}
+\usepackage{graphicx}
 \usetikzlibrary{arrows.meta,positioning,calc,fit,shapes.geometric}
 
 % ---------- Visual system ----------
@@ -53,10 +54,6 @@
 }
 \lstset{style=mystyle, language=Python}
 
-\newcommand{\taglabel}[2]{%
-  \tikz[baseline=(t.base)]\node[rounded corners=2pt,fill=#1,
-    inner xsep=6pt,inner ysep=2.5pt,text=white,font=\scriptsize\bfseries] (t) {#2};}
-
 \begin{document}
 
 % -----------------------------------------------------------------------------
@@ -77,171 +74,253 @@
 \end{frame}
 
 % -----------------------------------------------------------------------------
-\begin{frame}[fragile,t]{Core DSP Pipeline}
+\begin{frame}[fragile,t]{Philosophy \& Motivation}
+  \vspace{0.3cm}
+  
+  \textbf{The Problem:} Modern audio AI (Neural Networks) is a "black box" that requires massive GPU compute and hides the physical properties of sound.
+  
+  \vspace{0.4cm}
+  \textbf{The Voogle Solution:}
+  \begin{itemize}
+      \item \textbf{Deterministic Math:} 100\% classical signal processing.
+      \item \textbf{Physical Grounding:} We measure actual vocal tract resonance, kinetic energy, and spectral geometry.
+      \item \textbf{High Efficiency:} Sub-second retrieval using $O(1)$ Hash Inverted Indexes and $O(\log n)$ KD-Trees.
+  \end{itemize}
+  
+  \vspace{0.4cm}
+  \textit{"Can we build a complete audio search engine using only pure mathematics?"}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+\begin{frame}[fragile,t]{System Architecture}
   \vspace{0.2cm}
   
   \centering
-  \begin{tikzpicture}[node distance=0.6cm,>=Latex,scale=0.9,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center,minimum width=2.5cm,minimum height=1cm] (wav) {Raw Audio\\1D Waveform};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,minimum width=2.5cm,minimum height=1cm,right=of wav] (stft) {STFT \&\\Mel-Scale};
-    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,minimum width=2.5cm,minimum height=1cm,right=of stft] (mfcc) {DCT\\$\rightarrow$ MFCCs};
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center,minimum width=2.5cm,minimum height=1cm,right=of mfcc] (feat) {Spectral\\Descriptors};
+  \begin{tikzpicture}[node distance=0.8cm,>=Latex,scale=0.9,transform shape]
+    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center,minimum width=2cm,minimum height=4cm] (input) {Raw\\Audio\\Input};
     
-    \draw[->,thick,VInk] (wav) -- (stft);
-    \draw[->,thick,VInk] (stft) -- (mfcc);
-    \draw[->,thick,VInk] (mfcc) -- (feat);
+    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,minimum width=3cm,minimum height=0.8cm, right=of input, yshift=1.6cm] (dsp) {Core DSP Pipeline};
+    
+    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,minimum width=3cm,minimum height=0.8cm, right=of dsp, yshift=1cm] (feat1) {SDC \& TKEO};
+    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,minimum width=3cm,minimum height=0.8cm, below=0.2cm of feat1] (feat2) {LPC \& Graph};
+    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,minimum width=3cm,minimum height=0.8cm, below=0.2cm of feat2] (feat3) {2D Max Peaks};
+    
+    \node[draw=VBlue,thick,fill=VBlue,text=white,rounded corners,align=center,minimum width=2.5cm,minimum height=4cm, right=of feat2] (search) {Metric\\Search\\\&\\DTW};
+    
+    \draw[->,thick,VInk] (input) -- (dsp);
+    \draw[->,thick,VInk] (dsp.east) -- (feat1.west);
+    \draw[->,thick,VInk] (dsp.east) -- (feat2.west);
+    \draw[->,thick,VInk] (dsp.east) -- (feat3.west);
+    
+    \draw[->,thick,VInk] (feat1.east) -- (search.west);
+    \draw[->,thick,VInk] (feat2.east) -- (search.west);
+    \draw[->,thick,VInk] (feat3.east) -- (search.west);
   \end{tikzpicture}
-  \vspace{0.4cm}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+\begin{frame}[fragile,t]{Core DSP Pipeline}
+  \vspace{0.1cm}
   
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=1.0\textwidth]{images/img_dsp_spectrogram.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
 pre_emp = np.append(y[0], y[1:] - 0.97 * y[:-1])
-frames = librosa.util.frame(pre_emp, frame_length=1024, hop_length=512).T
+frames = librosa.util.frame(
+    pre_emp, frame_length=1024, hop_length=512).T
 window = np.hamming(1024)
 \end{lstlisting}
-  
-  \begin{itemize}
-      \item \textbf{Pre-emphasis}: $y[n] = x[n] - 0.97 x[n-1]$
-      \item \textbf{Mel-Frequency Cepstral Coefficients}: Vocal tract resonance
-      \item \textbf{Chroma / Tonnetz}: 12-class pitch harmonics
-  \end{itemize}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{y} (1D raw waveform)
+          \item \texttt{pre\_emp} (High-pass filter boost)
+          \item \texttt{frames} (Chunked audio blocks)
+          \item \texttt{window} (Hamming taper)
+          \item \texttt{S} (Mel-spectrogram magnitude)
+          \item \texttt{mfcc} (Discrete Cosine Transform)
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % -----------------------------------------------------------------------------
 \begin{frame}[fragile,t]{Emotion Identification (Non-Linear Dynamics)}
-  \vspace{0.2cm}
+  \vspace{0.1cm}
   
-  \centering
-  \begin{tikzpicture}[node distance=0.5cm,>=Latex,scale=0.85,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center] (tk) {TKEO Energy\\$\Psi[x(n)]$};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,right=of tk] (hnr) {HNR\\Autocorrelation};
-    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,right=of hnr] (mf) {MFCC\\Statistics};
-    \node[draw=VBlue,thick,fill=VWhite,rounded corners,align=center,below=0.4cm of hnr,minimum width=4cm] (vec) {32-Dim Euclidean Vector};
-    \node[draw=VCyan,thick,fill=VBlue,text=white,rounded corners,align=center,below=0.4cm of vec] (kd) {KD-Tree $O(\log n)$ Search};
-    
-    \draw[->,thick,VInk] (tk) |- (vec);
-    \draw[->,thick,VInk] (hnr) -- (vec);
-    \draw[->,thick,VInk] (mf) |- (vec);
-    \draw[->,thick,VInk] (vec) -- (kd);
-  \end{tikzpicture}
-  \vspace{0.2cm}
-
-  \[ \Psi[x(n)] = x^2(n) - x(n-1)x(n+1) \]
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=1.0\textwidth]{images/img_emotion_tkeo.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
-tkeo = signal[1:-1]**2 - signal[:-2] * signal[2:]
+tkeo = y[1:-1]**2 - y[:-2] * y[2:]
 tkeo_val = float(np.mean(tkeo))
-extra = [tkeo_val, hnr_val, rolloff_mean, zcr_mean, onset_mean, onset_std]
-feature = np.concatenate([mfcc_mean, mfcc_std, extra])
 \end{lstlisting}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{mfcc\_mean} (Timbre signature)
+          \item \texttt{mfcc\_std} (Timbre variance)
+          \item \texttt{tkeo\_val} (Micro-tremor energy)
+          \item \texttt{hnr\_val} (Harmonic-to-Noise clarity)
+          \item \texttt{rolloff\_mean} (Spectral skewness)
+          \item \texttt{zcr\_mean} (Zero-crossing rate)
+          \item \texttt{onset\_mean, onset\_std} (Flux)
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % -----------------------------------------------------------------------------
 \begin{frame}[fragile,t]{Language Identification (SDC Indexing)}
   \vspace{0.1cm}
   
-  \centering
-  \begin{tikzpicture}[node distance=0.5cm,>=Latex,scale=0.85,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center] (m) {MFCC Matrix\\(Timbre)};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,right=of m] (sdc) {Shifted Delta Cepstra\\(Temporal Rhythm)};
-    \node[draw=VGold,thick,fill=VBlue,text=white,rounded corners,align=center,right=of sdc] (tree) {Metric KD-Tree\\(49-Dim)};
-    
-    \draw[->,thick,VInk] (m) -- (sdc);
-    \draw[->,thick,VInk] (sdc) -- (tree);
-  \end{tikzpicture}
-  \vspace{0.1cm}
-
-  \[ \Delta\bm{c}(t;i) = \bm{c}(t+i+d) - \bm{c}(t+i-d) \]
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=0.9\textwidth]{images/img_language_sdc.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
 delta[:, t] = mfccs[:, right] - mfccs[:, left]
 for t in range(valid_frames):
-    sdc_frame = [delta[:, t + i * P] for i in range(k)]
-    sdc_features.append(np.concatenate(sdc_frame))
+    sdc_frame = [delta[:, t + i*P] for i in range(k)]
 \end{lstlisting}
-  
-  \begin{itemize}
-      \item $N=7, d=1, p=3, k=7 \rightarrow$ 49 coefficients capturing phonotactic shifts.
-  \end{itemize}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{N=7} (MFCC base dimensions)
+          \item \texttt{d=1} (Frame shift for delta)
+          \item \texttt{P=3} (Gap between delta blocks)
+          \item \texttt{k=7} (Concatenated blocks)
+          \item \texttt{delta} (Temporal derivatives)
+          \item \texttt{sdc\_frame} (49-Dim phonotactic rhythm)
+          \item \texttt{valid\_frames} (Shiftable bounds)
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % -----------------------------------------------------------------------------
 \begin{frame}[fragile,t]{Speaker Diarization (Spectral Graph Theory)}
   \vspace{0.1cm}
   
-  \centering
-  \begin{tikzpicture}[node distance=0.4cm,>=Latex,scale=0.75,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center] (vad) {VAD Split\\(Energy > 20dB)};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,right=of vad] (rbf) {RBF Kernel\\$A_{ij}$ Matrix};
-    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,right=of rbf] (lap) {Normalized\\Laplacian $L_{\mathrm{sym}}$};
-    \node[draw=VBlue,thick,fill=VBlue,text=white,rounded corners,align=center,right=of lap] (eig) {Fiedler\\Eigendecomposition};
-    
-    \draw[->,thick,VInk] (vad) -- (rbf);
-    \draw[->,thick,VInk] (rbf) -- (lap);
-    \draw[->,thick,VInk] (lap) -- (eig);
-  \end{tikzpicture}
-  \vspace{0.2cm}
-
-  \[ A_{ij} = \exp\!\left(-\gamma \lVert\bm{x}_i-\bm{x}_j\rVert_2^2\right) \qquad L_{\mathrm{sym}} = I - D^{-1/2}AD^{-1/2} \]
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=0.7\textwidth]{images/img_diarization_graph.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
-non_mute = librosa.effects.split(audio_signal, top_db=20)
 pairwise_dists = squareform(pdist(X, 'euclidean'))
-affinity_matrix = np.exp(-gamma * (pairwise_dists ** 2))
+affinity_matrix = np.exp(-gamma * (pairwise_dists**2))
 eigenvalues, eigenvectors = np.linalg.eigh(laplacian)
-labels = spectral_bisection_cluster(eigenvectors[:, :2])
 \end{lstlisting}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{non\_mute} (VAD active frames)
+          \item \texttt{X} (Aggregated MFCC segments)
+          \item \texttt{pairwise\_dists} (Euclidean space)
+          \item \texttt{gamma} (RBF kernel bandwidth)
+          \item \texttt{affinity\_matrix} ($A_{ij}$ connections)
+          \item \texttt{laplacian} ($L_{sym}$ normalized graph)
+          \item \texttt{eigenvectors[:, :2]} (Fiedler vector)
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % -----------------------------------------------------------------------------
-\begin{frame}[fragile,t]{Transcription (LPC \& DTW DP Matrix)}
+\begin{frame}[fragile,t]{Transcription (Levinson-Durbin \& DTW)}
   \vspace{0.1cm}
 
-  \centering
-  \begin{tikzpicture}[node distance=0.6cm,>=Latex,scale=0.85,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center] (lpc) {Yule-Walker\\Autocorrelation};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,right=of lpc] (lev) {Levinson-Durbin\\LPC $a_k$};
-    \node[draw=VGold,thick,fill=VBlue,text=white,rounded corners,align=center,right=of lev] (dtw) {Dynamic Time Warping\\Cost Matrix $C(i,j)$};
-    
-    \draw[->,thick,VInk] (lpc) -- (lev);
-    \draw[->,thick,VInk] (lev) -- (dtw);
-  \end{tikzpicture}
-  \vspace{0.2cm}
-
-  \[ C(i,j) = d(\bm{x}_i,\bm{y}_j) + \min(C_{i-1,j}, C_{i,j-1}, C_{i-1,j-1}) \]
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=0.7\textwidth]{images/img_transcription_dtw.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
-dist_mat = cdist(seq1, seq2, metric='euclidean')
-cost = np.full((N + 1, M + 1), np.inf)
-for i in range(1, N + 1):
-    for j in range(1, M + 1):
-        cost[i, j] = dist_mat[i-1, j-1] + min(cost[i-1, j], cost[i, j-1], cost[i-1, j-1])
+cost[i, j] = dist_mat[i-1, j-1] + min(
+    cost[i-1, j], cost[i, j-1], cost[i-1, j-1])
 \end{lstlisting}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{r} (Autocorrelation lags)
+          \item \texttt{a\_k} (Levinson-Durbin coefficients)
+          \item \texttt{segment\_lpcs} (Vocal tract shapes)
+          \item \texttt{dist\_mat} (Euclidean frame distances)
+          \item \texttt{cost} (DTW Dynamic Programming matrix)
+          \item \texttt{min\_dist} (Normalized path distance)
+          \item \texttt{matches\_found} (Subsequence NMS)
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % -----------------------------------------------------------------------------
 \begin{frame}[fragile,t]{Audio Matching (Shazam Constellation Hashing)}
   \vspace{0.1cm}
   
-  \centering
-  \begin{tikzpicture}[node distance=0.4cm,>=Latex,scale=0.8,transform shape]
-    \node[draw=VBlue,thick,fill=VLight,rounded corners,align=center] (mag) {Magnitude\\Spectrogram};
-    \node[draw=VCyan,thick,fill=VLight,rounded corners,align=center,right=of mag] (max) {2D Max Filter\\(Peaks)};
-    \node[draw=VGold,thick,fill=VLight,rounded corners,align=center,right=of max] (hash) {Combinatorial\\$H(f_1, f_2, \Delta t)$};
-    \node[draw=VBlue,thick,fill=VBlue,text=white,rounded corners,align=center,right=of hash] (hist) {Time-Offset\\Hough Histogram};
-    
-    \draw[->,thick,VInk] (mag) -- (max);
-    \draw[->,thick,VInk] (max) -- (hash);
-    \draw[->,thick,VInk] (hash) -- (hist);
-  \end{tikzpicture}
-  \vspace{0.2cm}
-
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.53\textwidth}
+      \centering
+      \includegraphics[width=1.0\textwidth]{images/img_music_constellation.png}
+      \vspace{0.1cm}
+      
 \begin{lstlisting}
-local_max = maximum_filter(magnitude, size=15) == magnitude
+local_max = maximum_filter(
+    magnitude, size=15) == magnitude
 peaks_mask = local_max & (magnitude > threshold)
-for j in range(1, target_zone_size + 1):
-    delta_t = t2 - t1
-    hash_str = f"{f1}|{f2}|{delta_t}"
-    h = int(hashlib.md5(hash_str.encode()).hexdigest()[:8], 16)
 \end{lstlisting}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \textbf{Extracted Variables:}
+      \begin{itemize}
+          \item \texttt{magnitude} (STFT absolute values)
+          \item \texttt{local\_max} (2D maximum filter peaks)
+          \item \texttt{peaks\_mask} (Energy thresholded peaks)
+          \item \texttt{f1, f2} (Paired peak frequencies)
+          \item \texttt{delta\_t} (Time offset between peaks)
+          \item \texttt{hash\_str} (Combinatorial geometry key)
+          \item \texttt{tally} (Hough Transform histogram counts)
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% -----------------------------------------------------------------------------
+\begin{frame}[fragile,t]{Evaluation \& Conclusion}
+  \vspace{0.3cm}
   
+  \textbf{Large-Scale System Evaluation (55 Unseen Audio Tracks):}
+  \vspace{0.2cm}
   \begin{itemize}
-      \item Queries inverted index and tallies $\Delta t = t_{\text{database}} - t_{\text{query}}$
+      \item \textbf{Song Retrieval (Shazam): 100\% Accuracy}
+      \begin{itemize}
+          \item \textit{Why?} Geometric constellation hashes are mathematically immune to heavy white noise and cropping.
+      \end{itemize}
+      \item \textbf{Language Identification (SDC): 85.7\% Accuracy}
+      \begin{itemize}
+          \item \textit{Why?} Languages possess strict physical rhythm constraints that map perfectly to metric spaces.
+      \end{itemize}
+      \item \textbf{Emotion Identification: 37.0\% Accuracy}
+      \begin{itemize}
+          \item \textit{Why?} \textcolor{red}{The limit of classical DSP.} "Happy" and "Angry" share identical kinetic energy (TKEO) signatures. Without the semantic context of a Neural Network, math cannot differentiate subjective psychology.
+      \end{itemize}
   \end{itemize}
 \end{frame}
 

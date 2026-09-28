@@ -101,12 +101,16 @@ def process_retrieval(audio_signal=None, audio_embeddings=None, sample_rate=1600
         best = res["best_match"]
         score = res["score"]
         
+        # A real Shazam match has multiple aligned constellation hashes; 1-4 are random collisions
+        if score < 5:
+            best = None
+            
         print(f"Fingerprint search complete. Best match: {best} (Hough peaks: {score})")
         return {
             "status": "success",
             "matches": [],
             "best_match": {"label": best, "similarity": score} if best else None,
-            "similarity": score
+            "similarity": score if best else 0
         }
 
 # --- NEW: Partial Matching Functions ---
@@ -203,4 +207,6 @@ def process_retrieval_fingerprint(audio_signal, sample_rate=16000):
     hashes = extract_constellation_hashes(audio_signal, sample_rate)
     db = get_fingerprint_db()
     best_label, max_peaks = db.query(hashes)
+    if max_peaks < 5:
+        return {"best_match": None, "score": max_peaks}
     return {"best_match": best_label, "score": max_peaks}

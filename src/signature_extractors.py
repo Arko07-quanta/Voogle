@@ -112,22 +112,28 @@ def extract_emotion_feature(audio_signal, sample_rate=16000):
     mfcc_mean = np.mean(mfcc, axis=1)
     mfcc_std = np.std(mfcc, axis=1)
     
-    tkeo_val = compute_tkeo(audio_signal) * 1000.0
+    # Scale mfcc[0] (overall gain) to balance with timbre coefficients
+    mfcc_mean_scaled = mfcc_mean.copy()
+    mfcc_mean_scaled[0] /= 10.0
+    
+    tkeo_val = compute_tkeo(audio_signal) * 10000.0
     hnr_val = compute_hnr(audio_signal, sample_rate)
     
-    #85 % energy
+    # Scale rolloff from ~3000 Hz down to ~30 to match MFCC magnitude
     rolloff = librosa.feature.spectral_rolloff(y=audio_signal, sr=sample_rate)
-    rolloff_mean = float(np.mean(rolloff))
+    rolloff_scaled = float(np.mean(rolloff)) / 100.0
     
+    # Scale ZCR from ~0.1 up to ~15
     zcr = librosa.feature.zero_crossing_rate(audio_signal)
-    zcr_mean = float(np.mean(zcr))
+    zcr_scaled = float(np.mean(zcr)) * 100.0
     
+    # Scale onset envelope metrics to ~15-40
     onset_env = librosa.onset.onset_strength(y=audio_signal, sr=sample_rate)
-    onset_mean = float(np.mean(onset_env))
-    onset_std = float(np.std(onset_env))
+    onset_mean_scaled = float(np.mean(onset_env)) * 10.0
+    onset_std_scaled = float(np.std(onset_env)) * 10.0
     
-    extra_dynamics = np.array([tkeo_val, hnr_val, rolloff_mean, zcr_mean, onset_mean, onset_std], dtype=np.float32)
-    feature = np.concatenate([mfcc_mean, mfcc_std, extra_dynamics])
+    extra_dynamics = np.array([tkeo_val, hnr_val, rolloff_scaled, zcr_scaled, onset_mean_scaled, onset_std_scaled], dtype=np.float32)
+    feature = np.concatenate([mfcc_mean_scaled, mfcc_std, extra_dynamics])
     return feature.astype(np.float32)
 
 from scipy.ndimage import maximum_filter

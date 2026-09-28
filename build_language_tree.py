@@ -10,7 +10,8 @@ LANGUAGE_NAMES = {
     "bn": "Bangla (Bengali)",
     "de": "German (Deutsch)",
     "en": "English",
-    "es": "Spanish (Español)"
+    "es": "Spanish (Español)",
+    "zh": "Mandarin (Chinese)"
 }
 
 def build_language_tree(languages_dir="datasets/languages", storage_dir="indexes", sample_rate=16000, max_per_class=60):
